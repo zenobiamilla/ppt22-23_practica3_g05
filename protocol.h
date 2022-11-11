@@ -4,11 +4,10 @@
 
 // COMANDOS DE APLICACION
 #define HELO "helo"  // Saludo al servidor SMTP
-#define MAIL "mail from"  
-#define RCPT "rcpt to" 
-#define DATA "data" 
-
-#define SD  "QUIT"  // Finalizacion de la conexion de aplicacion
+#define MAIL "mail from:"  
+#define RCPT "rcpt to:" 
+#define DATA "data"
+#define QUIT  "QUIT"  // Finalizacion de la conexion de aplicacion
 
 // RESPUESTAS A COMANDOS DE APLICACION
 #define OK  "OK"
@@ -17,17 +16,15 @@
 //FIN DE RESPUESTA
 #define CRLF "\r\n"
 
-//ESTADOS
-#define S_INIT 0
+//ESTADOS 
+#define S_BIENVENIDA 0
 #define S_HELO 1
 #define S_MAIL 2
-#define S_DATA 3
-#define S_QUIT 4
+#define S_RCPT 3
+#define S_DATA 4
+#define S_MENSAJE 5
+#define S_FIN 6
 
 
 //PUERTO DEL SERVICIO
 #define SMTP_SERVICE_PORT	25
-
-// NOMBRE Y PASSWORD AUTORIZADOS
-#define USER		"alumno"
-#define PASSWORD	"123456"

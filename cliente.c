@@ -48,6 +48,11 @@ int main(int* argc, char* argv[])
 	int err;
 	char cmd[5];
 
+	// Variables para la cabecera del mensaje
+	char from[256];
+	char to[256];
+	char subject[512];
+
 	//Inicialización de idioma
 	setlocale(LC_ALL, "es-ES");
 
@@ -114,101 +119,107 @@ int main(int* argc, char* argv[])
 				address_size = sizeof(server_in6);
 			}
 
-			//Cada nueva conexión establece el estado incial en
-			estado = S_INIT;
+			//Cada nueva conexión establece el estado incial (BIENVENIDA)
+			estado = S_BIENVENIDA;
 
 			if (connect(sockfd, server_in, address_size) == 0) {
 				printf("CLIENTE> CONEXION ESTABLECIDA CON %s:%d\r\n", ipdest, SMTP_SERVICE_PORT);
 
-				//Inicio de la máquina de estados
+				//Inicio de la máquina de estados: actualizados a los indicados en la figura 1 del guion
 				do {
 					switch (estado) {
-					case S_INIT:
+					case S_BIENVENIDA:
 						// Se recibe el mensaje de bienvenida
-
 						break;
-					case S_HELO:
-						printf("CLIENTE> Introduzca el nombre host: (o pulse enter para salir)");
+					case S_HELO: //Identificacion host
+						printf("CLIENTE> Introduzca el host: (pulse enter para salir)");
 						gets_s(input, sizeof(input));
-						//Identifica origen de la conexion
-						if (strlen(input) == 0) {
-							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", SD, CRLF);
-							estado = S_QUIT;
+						//Si pulsamos enter enviamos el comando QUIT y pasamos al estado FIN
+						if (strlen(input) == 0) {//Si pulsamos enter enviamos el comando QUIT
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", QUIT, CRLF);
+							estado = S_FIN;
 						}
-						else {
+						else {//si no enviamos el comando HELO
 							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s%s", HELO, input, CRLF);
 						}
 						break;
 					case S_MAIL:
 						// Remitente del correo
-						printf("CLIENTE> Introduzca el correo del remitente o pulse enter para salir): ");
+						printf("CLIENTE> Introduzca el correo del remitente (pulse enter para salir): ");
 						gets_s(input, sizeof(input));
-						if (strlen(input) == 0) {
-							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", SD, CRLF);
-							estado = S_QUIT;
+						if (strlen(input) == 0) { //si es salir mandamos el comando QUIT
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", QUIT, CRLF);
+							estado = S_FIN;
 						}
-						else
+						else {//si no mandamos el comando de aplicacion MAIL con el correo del remitente
+					
 							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s%s", MAIL, input, CRLF);
-
+						}
 						break;
-					case S_DATA:
-						printf("CLIENTE> Introduzca datos (enter o QUIT para salir): ");
+					case S_RCPT:
+						printf("CLIENTE> Introduzca el destinatario (enter para salir): ");
 						gets_s(input, sizeof(input));
-						if (strlen(input) == 0) {
-							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", SD, CRLF);
-							estado = S_QUIT;
+						if (strlen(input) == 0) {//si es salir mandamos el comando QUIT
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s", QUIT, CRLF);
+							estado = S_FIN;
 						}
-						else {
-							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s%s", DATA, input, CRLF);
+						else {//si no mandamos el comando de aplicacion RCPT con el correo del remitente
+							
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s %s", RCPT, input, CRLF);
+							break;
 						}
+					case S_DATA: //enviamos el comando DATA
+						sprintf_s(buffer_out, sizeof(buffer_out), "%s %s", DATA, CRLF);
 						break;
+					case S_MENSAJE:
 
+						printf("CLIENTE> Introduzca el mensaje (. en una linea aparte para finalizar): ");
+						gets_s(input, sizeof(input));
+						//montamos el mensaje completo para enviarlo
+						sprintf_s(buffer_out, sizeof(buffer_out), "Subject: Practica 1 %s%s%s.%s", CRLF, input, CRLF, CRLF);
+						break;
 					}
 
-					if (estado != S_INIT) {
+					if (estado != S_BIENVENIDA) {
 						enviados = send(sockfd, buffer_out, (int)strlen(buffer_out), 0);
-						if (enviados == SOCKET_ERROR) {
-							estado = S_QUIT;
+						if (enviados == SOCKET_ERROR) { //control de errores
+							estado = S_FIN;
 							continue;// La sentencia continue hace que la ejecución dentro de un
 							// bucle salte hasta la comprobación del mismo.
 						}
 					}
 
 					recibidos = recv(sockfd, buffer_in, 512, 0);
-					if (recibidos <= 0) {
+					//La maquina de estado para pasar de estado, la montamos a continuacion de recibir la respuesta del servidor
+					//ya que dependera de ella al estado al que pasemos.
+					if (recibidos <= 0) { //control de errores
 						DWORD error = GetLastError();
 						if (recibidos < 0) {
 							printf("CLIENTE> Error %d en la recepción de datos\r\n", error);
-							estado = S_QUIT;
+							estado = S_FIN;
 						}
 						else {
 							printf("CLIENTE> Conexión con el servidor cerrada\r\n");
-							estado = S_QUIT;
+							estado = S_FIN;
 						}
 					}
-					else {
+					else { // segun la respuesta del servidor, avanzaremos o no de estado.
 						buffer_in[recibidos] = 0x00;
-						strncpy_s(cmd, sizeof(cmd), buffer_in, 3);
-						cmd[3] = 0x00; //Nos quedamos con las 3 primeras cifras, que son las delestado
 						printf(buffer_in); //Respuesta del servidor
-						//Cambio de estado
-						switch (estado) {
-						case S_INIT:
-							estado++;
-							break;
-						case S_HELO:
-							//Si el codigo es 250, pasamos de estado
-							if (strcmp(cmd, "250") == 0) {
-								estado++;
+						//si el codigo de respuesta es 2XX->Peticion exito
+						// y si el codigo de respuesta es 3xx-> El comando se ha aceptado pero su proceso se ha retrasado a la espera de más información.
+						if ((strncmp(buffer_in, "2", 1) == 0) || strncmp(buffer_in, "3", 1) == 0) {
+							//Cambio de estado
+							if (estado == S_MENSAJE) {
+								estado = S_MAIL;
 							}
 							else {
-								estado = S_HELO;
+								estado++;
 							}
-							break;
 						}
-
 					}
-				} while (estado != S_QUIT);
+
+				} while (estado != S_FIN);
 			}
 			else {
 				int error_code = GetLastError();
