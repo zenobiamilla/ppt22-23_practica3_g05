@@ -168,15 +168,27 @@ int main(int* argc, char* argv[])
 							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s %s", RCPT, input, CRLF);
 							break;
 						}
-					case S_DATA: //enviamos el comando DATA
+					case S_DATA: //Enviamos el comando DATA
 						sprintf_s(buffer_out, sizeof(buffer_out), "%s %s", DATA, CRLF);
 						break;
 					case S_MENSAJE:
-
-						printf("CLIENTE> Introduzca el mensaje (. en una linea aparte para finalizar): ");
+						printf("CLIENTE> Introduzca el asunto: ");
 						gets_s(input, sizeof(input));
-						//montamos el mensaje completo para enviarlo
-						sprintf_s(buffer_out, sizeof(buffer_out), "Subject: Practica 1 %s%s%s.%s", CRLF, input, CRLF, CRLF);
+						strcpy_s(subject, sizeof(subject), input);
+						// Enviamos la cabecera: From, To, Subject
+						sprintf_s(buffer_out, sizeof(buffer_out), "%s%s%s%s%s%s%s%s%s%s", "From: ", from, CRLF, "To: ", to, CRLF, "Subject: ", subject, CRLF, CRLF);
+						//Pedimos que introduzca el mensaje, no puede superar 998bytes + cabeceras = tamaño de buffer_out
+						printf("CLIENTE> Introduzca el mensaje, (. en una linea aparte para finalizar): ");
+						gets_s(input, sizeof(input));
+						do{
+							//Comprobamos tamaño
+							if (strlen(input) > 998)
+								printf("CLIENTE>Tamaño excedido. Recuerde, el maximo son 998 caracteres.%s", CRLF);
+						} while (strlen(input) > 998);
+					
+							// Enviamos de la linea introducida
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", input, CRLF);
+						
 						break;
 					}
 
