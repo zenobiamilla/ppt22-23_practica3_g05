@@ -53,6 +53,10 @@ int main(int* argc, char* argv[])
 	char to[256];
 	char subject[512];
 
+	//Variables añadidas ademas de las de cabecera para la practica 3
+	int parte_mensaje;
+	int control;
+
 	//Inicialización de idioma
 	setlocale(LC_ALL, "es-ES");
 
@@ -128,9 +132,11 @@ int main(int* argc, char* argv[])
 				//Inicio de la máquina de estados: actualizados a los indicados en la figura 1 del guion
 				do {
 					switch (estado) {
+
 					case S_BIENVENIDA:
 						// Se recibe el mensaje de bienvenida
 						break;
+
 					case S_HELO: //Identificacion host
 						printf("CLIENTE> Introduzca el host: (pulse enter para salir)");
 						gets_s(input, sizeof(input));
@@ -143,7 +149,10 @@ int main(int* argc, char* argv[])
 							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s%s", HELO, input, CRLF);
 						}
 						break;
+
 					case S_MAIL:
+						parte_mensaje = 1; //inicializamos la variable que nos controla la parte del mensaje
+						control = 0; //inicializamosla variable que nos controla el final del mensaje
 						// Remitente del correo
 						printf("CLIENTE> Introduzca el correo del remitente (pulse enter para salir): ");
 						gets_s(input, sizeof(input));
@@ -152,81 +161,162 @@ int main(int* argc, char* argv[])
 							estado = S_FIN;
 						}
 						else {//si no mandamos el comando de aplicacion MAIL con el correo del remitente
-					
+							strcpy_s(from, sizeof(from), input); //almacenamos en la variable "from" el remitente
 							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s%s", MAIL, input, CRLF);
 						}
 						break;
+
 					case S_RCPT:
-						printf("CLIENTE> Introduzca el destinatario (enter para salir): ");
+						printf("CLIENTE> Introduzca un destinatario (enter para salir): ");
 						gets_s(input, sizeof(input));
 						if (strlen(input) == 0) {//si es salir mandamos el comando QUIT
 							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s", QUIT, CRLF);
 							estado = S_FIN;
 						}
 						else {//si no mandamos el comando de aplicacion RCPT con el correo del remitente
-							
+							strcpy_s(to, sizeof(to), input); //almacenamos en la variabre "to" el destinatario
 							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s %s", RCPT, input, CRLF);
-							break;
 						}
+						break;
+
 					case S_DATA: //enviamos el comando DATA
 						sprintf_s(buffer_out, sizeof(buffer_out), "%s %s", DATA, CRLF);
 						break;
+
 					case S_MENSAJE:
+						/*Dividimos en dos partes el mensajes. Una donde formaremos la cabecera y la enviamos
+						 y la parte 2 donde creamos el cuerpo del mensaje a enviar*/
+						if (parte_mensaje == 1) {
+							printf("CLIENTE> Introduzca el asunto: ");
+							gets_s(input, sizeof(input));
+							strcpy_s(subject, sizeof(subject), input); //almacenamos en una variable "subject"
+							printf("CLIENTE> Introduzca datos (enter para salir): ");
+							gets_s(input, sizeof(input));
+							//montamos el mensaje completo para enviarlo
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s%s%s%s%s%s%s%s%s%s.%s", "From: ", from, CRLF, "To: ", to, CRLF, "Subject: ", subject, CRLF, input, CRLF, CRLF);
+						}
 
-						printf("CLIENTE> Introduzca el mensaje (. en una linea aparte para finalizar): ");
-						gets_s(input, sizeof(input));
-						//montamos el mensaje completo para enviarlo
-						sprintf_s(buffer_out, sizeof(buffer_out), "Subject: Practica 1 %s%s%s.%s", CRLF, input, CRLF, CRLF);
-						break;
-					}
+						// ahora montamos el cuerpo del mensaje. Cambiamos el valor de la variable en el controlador de estados
+						if (parte_mensaje == 2) {
+							do {
+								printf("CLIENTE> Introduzca datos (. para finalizar): ");
+								gets_s(input, sizeof(input));
+								if (strlen(input) > 998) {
+									printf("CLIENTE> Ha introducido una linea demasiado larga\r\n");
+								}
+							} while (strlen(input) > 998);
 
+							// Comprobamos si quiere finalizar el mensaje
+							if (strcmp(input, ".") == 0) {
+								control = 1;
+								sprintf_s(buffer_out, sizeof(buffer_out), ".%s", CRLF);
+							}
+							else { //si no ha finalizado enviamos la linea introducida
+								sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", input, CRLF);
+							}
+						}
+							break;
+					}//fin  switch(estado)
+						
 					if (estado != S_BIENVENIDA) {
 						enviados = send(sockfd, buffer_out, (int)strlen(buffer_out), 0);
 						if (enviados == SOCKET_ERROR) { //control de errores
-							estado = S_FIN;
-							continue;// La sentencia continue hace que la ejecución dentro de un
-							// bucle salte hasta la comprobación del mismo.
+								estado = S_FIN;
+								continue;// La sentencia continue hace que la ejecución dentro de un
+								// bucle salte hasta la comprobación del mismo.
 						}
 					}
 
-					recibidos = recv(sockfd, buffer_in, 512, 0);
-					//La maquina de estado para pasar de estado, la montamos a continuacion de recibir la respuesta del servidor
-					//ya que dependera de ella al estado al que pasemos.
-					if (recibidos <= 0) { //control de errores
-						DWORD error = GetLastError();
-						if (recibidos < 0) {
-							printf("CLIENTE> Error %d en la recepción de datos\r\n", error);
-							estado = S_FIN;
-						}
-						else {
-							printf("CLIENTE> Conexión con el servidor cerrada\r\n");
-							estado = S_FIN;
-						}
-					}
-					else { // segun la respuesta del servidor, avanzaremos o no de estado.
-						buffer_in[recibidos] = 0x00;
-						printf(buffer_in); //Respuesta del servidor
-						//si el codigo de respuesta es 2XX->Peticion exito
-						// y si el codigo de respuesta es 3xx-> El comando se ha aceptado pero su proceso se ha retrasado a la espera de más información.
-						if ((strncmp(buffer_in, "2", 1) == 0) || strncmp(buffer_in, "3", 1) == 0) {
-							//Cambio de estado
-							if (estado == S_MENSAJE) {
-								estado = S_MAIL;
+					// Recibimos datos del servidor
+					if (estado != S_MENSAJE || (estado == S_MENSAJE && control == 1)) {
+						recibidos = recv(sockfd, buffer_in, 512, 0);
+						if (recibidos <= 0) {
+							DWORD error = GetLastError();
+							if (recibidos < 0) {
+								printf("CLIENTE> Error %d en la recepcion de datos\r\n", error);
+								estado = S_FIN;
 							}
 							else {
-								estado++;
+								printf("CLIENTE> Conexion con el servidor cerrada\r\n");
+								estado = S_FIN;
 							}
 						}
+						else {
+							buffer_in[recibidos] = 0x00;
+							printf( "SERVIDOR> %s", buffer_in);
+							
+						}
 					}
+					
+					// Controlador para el cambio de estado
+					switch (estado) {
+						case S_BIENVENIDA:
+							if (strncmp(buffer_in, "220", 3) == 0) {
+								estado++; // Pasamos al estado S_HELO
+							}
+							else {
+									estado = S_FIN; // Si hay error finalizamos
+							}
+							break;
 
+						case S_HELO:
+							if (strncmp(buffer_in, "250", 3) == 0) {
+								estado++; // Pasamos al estado S_MAIL
+								printf("CLIENTE> Direcc�on de Host correcta\r\n");
+							} 
+							break;
+
+						case S_MAIL:
+							if (strncmp(buffer_in, "250", 3) == 0) {
+								estado++; // Pasamos al estado S_RCPT
+								printf("CLIENTE> Remitente correcto\r\n");
+							} //si da un error u otro codigo volvemos al mismo estado
+							break;
+
+						case S_RCPT:
+							if (strncmp(buffer_in, "250", 3) == 0) {
+								printf("CLIENTE> Destinatario correcto\r\n");
+								estado++; // Pasamos al estado S_DATA								
+							}
+							else {//si no es correcto no pasamos de estado y volvemos al mismo
+									printf("CLIENTE> Destinatario incorrecto\r\n");
+							}
+							break;
+
+						case S_DATA:
+							if (strncmp(buffer_in, "354", 3) == 0) {
+									estado++;  // pasamos al estado S_MENSAJE
+							}
+							break;
+
+						case S_MENSAJE:
+							//comprobamos en que parte del mensaje estamos
+							if (control == 1) {// 
+								parte_mensaje = 1;
+								if (strncmp(buffer_in, "250", 1) == 0) {
+									printf("CLIENTE> Correo enviado con exito\r\n");
+									estado++; // Pasamos al estado S_FIN
+								}
+								else { //Si se produce un error en el envio del mensaje
+									printf("CLIENTE> Ha habido un error enviando el correo\r\n");
+									estado++; // Pasamos al estado S_FIN
+								}
+							}
+							else { //si la variable control=0, no ha terminado el mensaje, seguimos introduciendo datos
+								parte_mensaje = 2;
+							}
+							break;
+					} // fin controlador de estados
+				
 				} while (estado != S_FIN);
+
 			}
 			else {
 				int error_code = GetLastError();
 				printf("CLIENTE> ERROR AL CONECTAR CON %s:%d\r\n", ipdest, SMTP_SERVICE_PORT);
+				
 			}
 			closesocket(sockfd);
-
 		}
 		printf("-----------------------\r\n\r\nCLIENTE> Volver a conectar (S/N)\r\n");
 		option = _getche();
