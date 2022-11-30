@@ -52,6 +52,7 @@ int main(int* argc, char* argv[])
 	char from[256];
 	char to[256];
 	char subject[512];
+	char to1[512]; // en esta variable vamos a ir almacenando los varios destinatarios
 
 	//Variables añadidas ademas de las de cabecera para la practica 3
 	int parte_mensaje;  //vamos a tener dos partes: cabecera + cuerpo del mensaje
@@ -151,6 +152,7 @@ int main(int* argc, char* argv[])
 						break;
 
 					case S_MAIL:
+						to[0]=0x00;
 						parte_mensaje = 1; //inicializamos la variable que nos controla la parte del mensaje
 						control = 0; //inicializamosla variable que nos controla el final del mensaje
 						// Remitente del correo
@@ -167,14 +169,14 @@ int main(int* argc, char* argv[])
 						break;
 
 					case S_RCPT:
-						printf("CLIENTE> Introduzca un destinatario (enter para salir): ");
+						printf("CLIENTE> Introduzca el destinatario (enter para salir): ");
 						gets_s(input, sizeof(input));
-						if (strlen(input) == 0) {//si es salir mandamos el comando QUIT
-							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s", QUIT, CRLF);
+						if (strlen(input) == 0) {
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s",QUIT , CRLF);
 							estado = S_FIN;
 						}
-						else {//si no mandamos el comando de aplicacion RCPT con el correo del remitente
-							strcpy_s(to, sizeof(to), input); //almacenamos en la variabre "to" el destinatario
+						else {
+							sprintf_s(to1, sizeof(to1), "<%s>", input);
 							sprintf_s(buffer_out, sizeof(buffer_out), "%s %s %s", RCPT, input, CRLF);
 						}
 						break;
@@ -201,16 +203,13 @@ int main(int* argc, char* argv[])
 							printf("CLIENTE> Introduzca el asunto: ");
 							gets_s(input, sizeof(input));
 							strcpy_s(subject, sizeof(subject), input); //almacenamos en una variable "subject"
-							printf("CLIENTE> Introduzca datos (enter para salir): ");
-							gets_s(input, sizeof(input));
-							//montamos el mensaje completo para enviarlo
-							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s%s%s%s%s%s%s%s%s%s.%s", "From: ", from, CRLF, "To: ", to, CRLF, "Subject: ", subject, CRLF, input, CRLF, CRLF);
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s%s%s%s%s%s%s%s%s%s.%s", "From: ", from, CRLF, "To: ", to1, CRLF, "Subject: ", subject, CRLF, input, CRLF, CRLF);
 						}
 
 						// ahora montamos el cuerpo del mensaje. Cambiamos el valor de la variable en el controlador de estados
 						if (parte_mensaje == 2) {
 							do {
-								printf("CLIENTE> Introduzca datos (. para finalizar): ");
+								printf("CLIENTE> Introduzca los datos (. para finalizar): ");
 								gets_s(input, sizeof(input));
 								if (strlen(input) > 998) {
 									printf("CLIENTE> Ha introducido una linea demasiado larga\r\n");
@@ -273,7 +272,7 @@ int main(int* argc, char* argv[])
 						case S_HELO:
 							if (strncmp(buffer_in, "250", 3) == 0) {
 								estado++; // Pasamos al estado S_MAIL
-								printf("CLIENTE> Direcc�on de Host correcta\r\n");
+								printf("CLIENTE> Direccion de Host correcta.\r\n");
 							} 
 							break;
 
@@ -287,10 +286,17 @@ int main(int* argc, char* argv[])
 						case S_RCPT:
 							if (strncmp(buffer_in, "250", 3) == 0) {
 								printf("CLIENTE> Destinatario correcto\r\n");
-								estado++; // Pasamos al estado S_DATA								
+								strcat_s(to, sizeof(to), to1); //añadimos a la lista de destinatarios to1
+								// Varios destinatarios
+								printf("CLIENTE> ¿Desea introducir mas destinatarios? (s/n): ");
+								gets_s(input, sizeof(input));
+								if (strncmp(input, "S", 1) == 0 || strncmp(input, "s", 1) == 0)
+									strcat_s(to, sizeof(to), ",");
+								else
+									estado++; // Pasamos al estado S_DATA para introducir nuevo destinatario							
 							}
-							else {//si no es correcto no pasamos de estado y volvemos al mismo
-									printf("CLIENTE> Destinatario incorrecto\r\n");
+							else { // destinatario no es correcto
+								printf("CLIENTE> Destinatario incorrecto\r\n");
 							}
 							break;
 
@@ -301,19 +307,23 @@ int main(int* argc, char* argv[])
 							break;
 
 						case S_MENSAJE:
-							//comprobamos en que parte del mensaje estamos
-							if (control == 1) {// 
+							if (control == 1) {// comprobamos si estamos en el final del mensaje
 								parte_mensaje = 1;
 								if (strncmp(buffer_in, "250", 1) == 0) {
-									printf("CLIENTE> Correo enviado con exito\r\n");
-									estado++; // Pasamos al estado S_FIN
+									printf("CLIENTE> Correo enviado con exito.\r\n");
+									printf("CLIENTE> ¿Quiere enviar otro correo? (s/n): ");
+									gets_s(input, sizeof(input));
+									if (strncmp(input, "s", 1) == 0 || strncmp(input, "S", 1) == 0)
+										estado = S_MAIL;
+									else
+										estado++; // Pasamos a S_FIN
 								}
-								else { //Si se produce un error en el envio del mensaje
-									printf("CLIENTE> Ha habido un error enviando el correo\r\n");
-									estado++; // Pasamos al estado S_FIN
+								else { //Si no se envía el mensaje correctamente.
+									printf( "CLIENTE> Ha habido un error enviando el correo\r\n");
+									estado++; // Pasamos a S_FIN
 								}
 							}
-							else { //si la variable control=0, no ha terminado el mensaje, seguimos introduciendo datos
+							else {
 								parte_mensaje = 2;
 							}
 							break;
