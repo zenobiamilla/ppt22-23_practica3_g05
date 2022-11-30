@@ -54,8 +54,8 @@ int main(int* argc, char* argv[])
 	char subject[512];
 
 	//Variables añadidas ademas de las de cabecera para la practica 3
-	int parte_mensaje;
-	int control;
+	int parte_mensaje;  //vamos a tener dos partes: cabecera + cuerpo del mensaje
+	int control; //control fin de manesaje
 
 	//Inicialización de idioma
 	setlocale(LC_ALL, "es-ES");
@@ -179,8 +179,19 @@ int main(int* argc, char* argv[])
 						}
 						break;
 
-					case S_DATA: //enviamos el comando DATA
-						sprintf_s(buffer_out, sizeof(buffer_out), "%s %s", DATA, CRLF);
+					case S_DATA: 
+						printf("CLIENTE> ¿Desea continuar con estos datos? (s/n): ");
+						gets_s(input, sizeof(input));
+						if (strncmp(input, "s", 1) == 0 || strncmp(input, "S", 1) == 0) {
+							printf( "CLIENTE>  Continuamos con el envio de correo.\r\n");
+							//enviamos el comando DATA
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", DATA, CRLF);
+						}
+						else { // si no queremos continuar, enviamos el comando RESET
+							printf( "CLIENTE> Reseteamos datos.\r\n");
+							sprintf_s(buffer_out, sizeof(buffer_out), "%s%s", RESET, CRLF);
+							estado = S_HELO;
+						}
 						break;
 
 					case S_MENSAJE:

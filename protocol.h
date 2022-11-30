@@ -8,6 +8,7 @@
 #define RCPT "rcpt to:" 
 #define DATA "data"
 #define QUIT  "QUIT"  // Finalizacion de la conexion de aplicacion
+#define RESET  "RSET" 
 
 // RESPUESTAS A COMANDOS DE APLICACION
 #define OK  "OK"
